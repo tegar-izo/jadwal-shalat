@@ -1,6 +1,7 @@
 document.addEventListener('alpine:init', () => {
     Alpine.data('shalatApp', () => ({
         loading: false,
+        loadingCities: false,
         showSchedule: false,
         theme: localStorage.getItem('theme') || 'light',
         cityLabel: '',
@@ -10,12 +11,27 @@ document.addEventListener('alpine:init', () => {
         cities: [],
         schedule: {},
         activePrayer: '',
-        nextPrayer: { name: '', timer: '00:00:00' },
+        nextPrayer: { name: '', key: '', clock: '', timer: '00:00:00', progress: 0 },
         today: { hari: '', date: '', hijri: '' },
         modals: { onboarding: false, settings: false },
         toast: { show: false, msg: '' },
         error: { show: false, msg: '', retry: null },
         countdownInterval: null,
+        toastTimer: null,
+        prayerOrder: ['imsak', 'subuh', 'dhuha', 'dzuhur', 'ashar', 'maghrib', 'isya'],
+        prayerIcons: {
+            imsak: 'nights_stay',
+            subuh: 'dark_mode',
+            dhuha: 'wb_sunny',
+            dzuhur: 'light_mode',
+            ashar: 'sunny',
+            maghrib: 'wb_twilight',
+            isya: 'bedtime'
+        },
+
+        get activeLabel() {
+            return this.activePrayer ? this.labelFor(this.activePrayer) : '';
+        },
 
         init() {
             this.applyTheme();
@@ -31,29 +47,33 @@ document.addEventListener('alpine:init', () => {
             }
         },
 
+        labelFor(name) {
+            return name.charAt(0).toUpperCase() + name.slice(1);
+        },
+
         applyTheme() {
             document.documentElement.setAttribute('data-theme', this.theme);
             const meta = document.getElementById('meta-theme-color');
-            if (meta) meta.setAttribute('content', this.theme === 'dark' ? '#111412' : '#fbfdf9');
+            if (meta) meta.setAttribute('content', this.theme === 'dark' ? '#0d110e' : '#f4f8f4');
         },
 
         toggleTheme() {
             this.theme = this.theme === 'dark' ? 'light' : 'dark';
             localStorage.setItem('theme', this.theme);
             this.applyTheme();
-            setTimeout(() => this.modals.settings = false, 300);
         },
 
         showToast(msg, duration = 3000) {
+            clearTimeout(this.toastTimer);
             this.toast.msg = msg;
             this.toast.show = true;
-            setTimeout(() => this.toast.show = false, duration);
+            this.toastTimer = setTimeout(() => (this.toast.show = false), duration);
         },
 
         showError(msg, retry) {
             this.error.msg = msg;
-            this.error.show = true;
             this.error.retry = retry;
+            this.error.show = true;
         },
 
         retryAction() {
@@ -64,46 +84,53 @@ document.addEventListener('alpine:init', () => {
         async fetchProvinces() {
             try {
                 const cached = JSON.parse(localStorage.getItem('cachedProvinces'));
-                if (cached && (Date.now() - cached.timestamp < 86400000)) {
+                if (cached && Date.now() - cached.timestamp < 86400000) {
                     this.provinces = cached.data;
                     return;
                 }
-                const res = await fetch("https://equran.id/api/v2/shalat/provinsi");
+                const res = await fetch('https://equran.id/api/v2/shalat/provinsi');
                 const data = await res.json();
                 if (data.code === 200) {
                     this.provinces = data.data;
-                    localStorage.setItem('cachedProvinces', JSON.stringify({ data: data.data, timestamp: Date.now() }));
+                    localStorage.setItem(
+                        'cachedProvinces',
+                        JSON.stringify({ data: data.data, timestamp: Date.now() })
+                    );
                 }
             } catch (e) {
-                this.showError("Gagal mengambil data provinsi.", () => this.fetchProvinces());
+                this.showError('Gagal mengambil data provinsi.', () => this.fetchProvinces());
             }
         },
 
-        async loadCities(prov) {
+        async loadCities(prov, keepSelection = false) {
             if (!prov) return;
             this.selectedProv = prov;
-            this.loading = true;
+            if (!keepSelection) this.selectedCity = '';
+            this.loadingCities = true;
             try {
                 const cacheKey = `cities_${prov}`;
                 const cached = JSON.parse(localStorage.getItem(cacheKey));
-                if (cached && (Date.now() - cached.timestamp < 86400000)) {
+                if (cached && Date.now() - cached.timestamp < 86400000) {
                     this.cities = cached.data;
                     return;
                 }
-                const res = await fetch("https://equran.id/api/v2/shalat/kabkota", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
+                const res = await fetch('https://equran.id/api/v2/shalat/kabkota', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ provinsi: prov })
                 });
                 const data = await res.json();
                 if (data.code === 200) {
                     this.cities = data.data;
-                    localStorage.setItem(cacheKey, JSON.stringify({ data: data.data, timestamp: Date.now() }));
+                    localStorage.setItem(
+                        cacheKey,
+                        JSON.stringify({ data: data.data, timestamp: Date.now() })
+                    );
                 }
             } catch (e) {
-                this.showError("Gagal mengambil data kota.", () => this.loadCities(prov));
+                this.showError('Gagal mengambil data kota.', () => this.loadCities(prov, keepSelection));
             } finally {
-                this.loading = false;
+                this.loadingCities = false;
             }
         },
 
@@ -118,7 +145,7 @@ document.addEventListener('alpine:init', () => {
             this.modals.settings = false;
             this.modals.onboarding = true;
             this.fetchProvinces();
-            if (this.selectedProv) this.loadCities(this.selectedProv);
+            if (this.selectedProv) this.loadCities(this.selectedProv, true);
         },
 
         async fetchPrayerTimes(prov, kab) {
@@ -126,34 +153,56 @@ document.addEventListener('alpine:init', () => {
             this.showSchedule = false;
             const now = new Date();
             try {
-                const res = await fetch("https://equran.id/api/v2/shalat", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ provinsi: prov, kabkota: kab, bulan: now.getMonth() + 1, tahun: now.getFullYear() })
+                const res = await fetch('https://equran.id/api/v2/shalat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        provinsi: prov,
+                        kabkota: kab,
+                        bulan: now.getMonth() + 1,
+                        tahun: now.getFullYear()
+                    })
                 });
                 const data = await res.json();
                 if (data.code === 200) {
                     this.cityLabel = data.data.kabkota;
-                    const timings = data.data.jadwal.find(j => parseInt(j.tanggal) === now.getDate());
+                    const timings = data.data.jadwal.find(
+                        (j) => parseInt(j.tanggal, 10) === now.getDate()
+                    );
                     if (timings) {
-                        const dateObj = new Date();
-                        const monthsIndo = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
+                        const monthsIndo = [
+                            'Januari',
+                            'Februari',
+                            'Maret',
+                            'April',
+                            'Mei',
+                            'Juni',
+                            'Juli',
+                            'Agustus',
+                            'September',
+                            'Oktober',
+                            'November',
+                            'Desember'
+                        ];
                         this.today.hari = timings.hari;
-                        this.today.date = `${dateObj.getDate()} ${monthsIndo[dateObj.getMonth()]} ${dateObj.getFullYear()}`;
-                        const keys = ["imsak", "subuh", "dhuha", "dzuhur", "ashar", "maghrib", "isya"];
-                        this.schedule = Object.fromEntries(keys.map(k => [k, timings[k]]));
+                        this.today.date = `${now.getDate()} ${monthsIndo[now.getMonth()]} ${now.getFullYear()}`;
+                        this.schedule = Object.fromEntries(
+                            this.prayerOrder.map((k) => [k, timings[k]])
+                        );
                         this.fetchHijriDate();
                         this.startCountdown(data.data.jadwal);
                         this.modals.onboarding = false;
-                        setTimeout(() => this.showSchedule = true, 300);
+                        setTimeout(() => (this.showSchedule = true), 300);
                     } else {
-                        throw new Error("Jadwal tidak ditemukan.");
+                        throw new Error('Jadwal tidak ditemukan.');
                     }
                 } else {
-                    throw new Error(data.message || "Gagal mengambil jadwal.");
+                    throw new Error(data.message || 'Gagal mengambil jadwal.');
                 }
             } catch (e) {
-                this.showError(e.message || "Gagal mengambil jadwal.", () => this.fetchPrayerTimes(prov, kab));
+                this.showError(e.message || 'Gagal mengambil jadwal.', () =>
+                    this.fetchPrayerTimes(prov, kab)
+                );
             } finally {
                 this.loading = false;
             }
@@ -167,89 +216,165 @@ document.addEventListener('alpine:init', () => {
                 const data = await res.json();
                 if (data.code === 200) {
                     const h = data.data.hijri;
-                    const months = { 1: "Muharram", 2: "Safar", 3: "Rabiul Awal", 4: "Rabiul Akhir", 5: "Jumadil Awal", 6: "Jumadil Akhir", 7: "Rajab", 8: "Sya'ban", 9: "Ramadhan", 10: "Syawal", 11: "Dzulqa'dah", 12: "Dzulhijjah" };
+                    const months = {
+                        1: 'Muharram',
+                        2: 'Safar',
+                        3: 'Rabiul Awal',
+                        4: 'Rabiul Akhir',
+                        5: 'Jumadil Awal',
+                        6: 'Jumadil Akhir',
+                        7: 'Rajab',
+                        8: "Sya'ban",
+                        9: 'Ramadhan',
+                        10: 'Syawal',
+                        11: "Dzulqa'dah",
+                        12: 'Dzulhijjah'
+                    };
                     this.today.hijri = `${h.day} ${months[h.month.number]} ${h.year} H`;
                 }
-            } catch (e) {}
+            } catch (e) {
+                // Tanggal Hijriah bersifat pelengkap; jadwal tetap tampil tanpa itu.
+            }
         },
 
         startCountdown(monthSchedule) {
             if (this.countdownInterval) clearInterval(this.countdownInterval);
+            this.activePrayer = '';
+            this.nextPrayer = { name: '', key: '', clock: '', timer: '00:00:00', progress: 0 };
+
+            const pad = (n) => n.toString().padStart(2, '0');
+
             const update = () => {
                 const now = new Date();
-                const timings = monthSchedule.find(j => parseInt(j.tanggal) === now.getDate());
-                if (!timings) return;
+                const today = monthSchedule.find(
+                    (j) => parseInt(j.tanggal, 10) === now.getDate()
+                );
+                if (!today) return;
 
-                const prayerOrder = ["imsak", "subuh", "dhuha", "dzuhur", "ashar", "maghrib", "isya"];
+                const entries = this.prayerOrder.map((name) => {
+                    const [h, m] = today[name].split(':').map(Number);
+                    const date = new Date(now);
+                    date.setHours(h, m, 0, 0);
+                    return { key: name, label: this.labelFor(name), clock: today[name], date };
+                });
+
+                const nextIndex = entries.findIndex((entry) => now < entry.date);
                 let next = null;
-                let active = "isya";
+                let prev = null;
 
-                for (let name of prayerOrder) {
-                    const [h, m] = timings[name].split(":").map(Number);
-                    const prayerDate = new Date();
-                    prayerDate.setHours(h, m, 0, 0);
-
-                    if (now < prayerDate) {
-                        next = { name: name.charAt(0).toUpperCase() + name.slice(1), date: prayerDate };
-                        break;
-                    }
-                    active = name;
-                    if (now.getHours() === h && now.getMinutes() === m && now.getSeconds() === 0) {
-                        this.showToast(`Waktu ${name} telah tiba!`);
-                    }
-                }
-
-                if (!next) {
-                    const tomorrow = monthSchedule.find(j => parseInt(j.tanggal) === now.getDate() + 1);
+                if (nextIndex === -1) {
+                    prev = entries[entries.length - 1];
+                    const tomorrow = monthSchedule.find(
+                        (j) => parseInt(j.tanggal, 10) === now.getDate() + 1
+                    );
                     if (tomorrow) {
-                        const [h, m] = tomorrow.imsak.split(":").map(Number);
-                        const nDate = new Date(); nDate.setDate(now.getDate() + 1); nDate.setHours(h, m, 0, 0);
-                        next = { name: "Imsak Esok", date: nDate };
+                        const [h, m] = tomorrow.imsak.split(':').map(Number);
+                        const date = new Date(now);
+                        date.setDate(date.getDate() + 1);
+                        date.setHours(h, m, 0, 0);
+                        next = { key: 'imsak', label: 'Imsak', clock: tomorrow.imsak, date };
                     }
+                } else {
+                    next = entries[nextIndex];
+                    prev = nextIndex > 0 ? entries[nextIndex - 1] : null;
                 }
 
-                this.activePrayer = active;
-                if (next) {
-                    const diff = next.date - now;
-                    const h = Math.floor(diff / 3600000);
-                    const m = Math.floor((diff % 3600000) / 60000);
-                    const s = Math.floor((diff % 60000) / 1000);
-                    this.nextPrayer.name = next.name;
-                    this.nextPrayer.timer = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+                const active = prev ? prev.key : '';
+                if (this.activePrayer && active && active !== this.activePrayer) {
+                    this.showToast(`${this.labelFor(active)} telah tiba.`);
                 }
+                this.activePrayer = active;
+
+                if (!next) return;
+
+                const diff = Math.max(0, next.date - now);
+                const h = Math.floor(diff / 3600000);
+                const m = Math.floor((diff % 3600000) / 60000);
+                const s = Math.floor((diff % 60000) / 1000);
+
+                let progress = 0;
+                if (prev) {
+                    const span = next.date - prev.date;
+                    if (span > 0) progress = ((now - prev.date) / span) * 100;
+                }
+
+                this.nextPrayer = {
+                    name: next.label,
+                    key: next.key,
+                    clock: next.clock,
+                    timer: `${pad(h)}:${pad(m)}:${pad(s)}`,
+                    progress: Math.min(100, Math.max(0, progress))
+                };
             };
+
             update();
             this.countdownInterval = setInterval(update, 1000);
         },
 
         detectLocation() {
-            if (!navigator.geolocation) return this.showToast("Geolocation tidak didukung.");
+            if (!navigator.geolocation) return this.showToast('Geolocation tidak didukung.');
             this.loading = true;
-            navigator.geolocation.getCurrentPosition(async (pos) => {
-                try {
-                    const res = await fetch(`https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${pos.coords.latitude}&longitude=${pos.coords.longitude}&localityLanguage=id`);
-                    const data = await res.json();
-                    await this.fetchProvinces();
-                    const matchedProv = this.provinces.find(p => data.principalSubdivision.toLowerCase().includes(p.toLowerCase()) || p.toLowerCase().includes(data.principalSubdivision.toLowerCase()));
-                    if (matchedProv) {
-                        this.selectedProv = matchedProv;
-                        await this.loadCities(matchedProv);
-                        const cleanCity = (data.city || data.locality).replace(/Kota|Kabupaten|Kab\.|City/gi, "").trim().toLowerCase();
-                        const matchedCity = this.cities.find(c => c.replace(/Kota|Kabupaten|Kab\./gi, "").trim().toLowerCase().includes(cleanCity));
-                        if (matchedCity) {
-                            this.selectedCity = matchedCity;
-                            this.showToast(`Terdeteksi: ${matchedCity}`);
+            navigator.geolocation.getCurrentPosition(
+                async (pos) => {
+                    try {
+                        const res = await fetch(
+                            `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${pos.coords.latitude}&longitude=${pos.coords.longitude}&localityLanguage=id`
+                        );
+                        const data = await res.json();
+                        await this.fetchProvinces();
+                        const matchedProv = this.provinces.find(
+                            (p) =>
+                                data.principalSubdivision.toLowerCase().includes(p.toLowerCase()) ||
+                                p.toLowerCase().includes(data.principalSubdivision.toLowerCase())
+                        );
+                        if (matchedProv) {
+                            this.selectedProv = matchedProv;
+                            await this.loadCities(matchedProv);
+                            const cleanCity = (data.city || data.locality || '')
+                                .replace(/Kota|Kabupaten|Kab\.|City/gi, '')
+                                .trim()
+                                .toLowerCase();
+                            if (cleanCity) {
+                                const matchedCity = this.cities.find((c) =>
+                                    c
+                                        .replace(/Kota|Kabupaten|Kab\./gi, '')
+                                        .trim()
+                                        .toLowerCase()
+                                        .includes(cleanCity)
+                                );
+                                if (matchedCity) {
+                                    this.selectedCity = matchedCity;
+                                    // Terapkan langsung: sebelumnya lokasi baru hanya masuk setelah
+                                    // pengguna menekan "Simpan", sehingga header tetap menampilkan
+                                    // kota lama dan deteksi terkesan salah baca.
+                                    this.saveLocation();
+                                    const accuracy = Math.round(pos.coords.accuracy || 0);
+                                    this.showToast(
+                                        accuracy > 5000
+                                            ? `Lokasi perkiraan (±${Math.round(accuracy / 1000)} km): ${matchedCity}. Periksa kembali.`
+                                            : `Lokasi diubah ke ${matchedCity}`,
+                                        4000
+                                    );
+                                }
+                            }
+                            if (!this.selectedCity) {
+                                this.showToast('Kota tidak cocok otomatis, pilih manual.');
+                            }
+                        } else {
+                            this.showToast('Provinsi tidak dikenali, pilih manual.');
                         }
+                    } catch (e) {
+                        this.showToast('Gagal deteksi lokasi.');
+                    } finally {
+                        this.loading = false;
                     }
-                } catch (e) {
-                    this.showToast("Gagal deteksi lokasi.");
-                } finally {
+                },
+                () => {
+                    this.showToast('Akses lokasi ditolak.');
                     this.loading = false;
-                }
-            }, () => {
-                this.showToast("Akses lokasi ditolak.");
-                this.loading = false;
-            });
+                },
+                { timeout: 10000, maximumAge: 600000 }
+            );
         }
     }));
 });

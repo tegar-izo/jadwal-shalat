@@ -2,19 +2,14 @@
 <html lang="id">
     <head>
         <meta charset="UTF-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
         <title>Jadwal Shalat</title>
-        <meta name="theme-color" content="#fbfdf9" id="meta-theme-color" />
-        <link
-            href="https://fonts.googleapis.com/icon?family=Material+Icons+Round"
-            rel="stylesheet"
-        />
+        <meta name="description" content="Jadwal shalat harian, countdown waktu shalat berikutnya, dan kalender Hijriah untuk seluruh Indonesia." />
+        <meta name="theme-color" content="#f4f8f4" id="meta-theme-color" />
+        <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet" />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-        <link
-            href="https://fonts.googleapis.com/css2?family=Google+Sans:ital,opsz,wght@0,17..18,400..700;1,17..18,400..700&display=swap"
-            rel="stylesheet"
-        />
+        <link href="https://fonts.googleapis.com/css2?family=Google+Sans:ital,opsz,wght@0,17..18,400..700;1,17..18,400..700&display=swap" rel="stylesheet" />
         <link rel="stylesheet" href="css/animation.css" />
         <link rel="stylesheet" href="css/index.css" />
         <link rel="manifest" href="manifest.json" />
@@ -22,125 +17,211 @@
     </head>
     <body x-data="shalatApp" x-cloak>
         <div id="app">
-            <div id="loading-overlay" x-show="loading" x-transition.opacity>
-                <div class="spinner"></div>
-                <p>Memuat...</p>
+            <div id="loading-overlay" x-show="loading" x-transition.opacity role="status" aria-live="polite">
+                <div class="loading-mark">
+                    <span class="material-icons-round" aria-hidden="true">mosque</span>
+                </div>
+                <div class="spinner" aria-hidden="true"></div>
+                <p class="body-medium">Menyiapkan jadwal shalat…</p>
             </div>
 
             <!-- Error UI -->
-            <div id="error-container" class="modal" x-show="error.show" x-transition>
-                <div class="modal-content surface-container">
-                    <span class="material-icons-round" style="font-size: 48px; color: var(--p);">error_outline</span>
-                    <h2 class="headline-small">Waduh!</h2>
-                    <p class="body-medium" x-text="error.msg"></p>
-                    <button @click="retryAction()" class="button-filled">Coba Lagi</button>
+            <div id="error-container" class="modal" x-show="error.show" x-transition role="dialog" aria-modal="true" aria-labelledby="error-title" @keydown.escape.window="error.show = false">
+                <div class="surface-container" @click.self="error.show = false">
+                    <span class="material-icons-round state-icon state-icon-error" aria-hidden="true">error_outline</span>
+                    <h2 id="error-title" class="headline-small">Waduh!</h2>
+                    <p class="body-medium muted" x-text="error.msg"></p>
+                    <div class="modal-actions">
+                        <button @click="retryAction()" type="button" class="button-filled">Coba Lagi</button>
+                        <button @click="error.show = false" type="button" class="button-text">Tutup</button>
+                    </div>
                 </div>
             </div>
 
             <!-- Toast Notification -->
-            <div id="toast" x-show="toast.show" x-transition:enter="toast-enter" x-transition:leave="toast-exit" x-text="toast.msg"></div>
+            <div id="toast" role="status" aria-live="polite" x-show="toast.show" x-transition:enter="toast-enter" x-transition:leave="toast-exit" x-text="toast.msg"></div>
 
-            <!-- Modal Pemilihan Lokasi Awal -->
-            <div id="onboarding-modal" class="modal" x-show="modals.onboarding" x-transition>
-                <div class="modal-content surface-container">
-                    <h2 class="headline-small">Pilih Lokasi</h2>
-                    <p class="body-medium">Silakan pilih lokasi Anda untuk melihat jadwal shalat.</p>
-                    <div class="location-selector modal-selector">
-                        <select id="modal-provinsi" class="filled-select" @change="loadCities($event.target.value)" x-model="selectedProv">
-                            <option value="">Pilih Provinsi</option>
-                            <template x-for="p in provinces" :key="p">
-                                <option :value="p" x-text="p"></option>
-                            </template>
-                        </select>
-                        <select id="modal-kabkota" class="filled-select" :disabled="!cities.length" x-model="selectedCity">
-                            <option value="">Pilih Kota/Kabupaten</option>
-                            <template x-for="c in cities" :key="c">
-                                <option :value="c" x-text="c"></option>
-                            </template>
-                        </select>
-                        <button @click="detectLocation()" class="button-tonal">
-                            <span class="material-icons-round">my_location</span>
-                            Deteksi Lokasi
+            <!-- Modal Pemilihan Lokasi -->
+            <div id="onboarding-modal" class="modal" x-show="modals.onboarding" x-transition role="dialog" aria-modal="true" aria-labelledby="location-title" @keydown.escape.window="cityLabel && (modals.onboarding = false)">
+                <div class="surface-container">
+                    <div class="modal-header">
+                        <h2 id="location-title" class="headline-small">Pilih Lokasi</h2>
+                        <button
+                            @click="modals.onboarding = false"
+                            type="button"
+                            class="icon-button icon-button-ghost"
+                            aria-label="Tutup pemilihan lokasi"
+                            x-show="cityLabel"
+                        >
+                            <span class="material-icons-round" aria-hidden="true">close</span>
                         </button>
-                        <button @click="saveLocation()" class="button-filled" :disabled="!selectedCity">
-                            Simpan & Masuk
+                    </div>
+                    <p class="body-medium muted">Pilih provinsi lalu kota/kabupaten Anda agar jadwal sesuai wilayah setempat.</p>
+                    <div class="location-selector modal-selector">
+                        <label class="field">
+                            <span class="field-label">Provinsi</span>
+                            <select id="modal-provinsi" class="filled-select" @change="loadCities($event.target.value)" x-model="selectedProv">
+                                <option value="">Pilih Provinsi</option>
+                                <template x-for="p in provinces" :key="p">
+                                    <option :value="p" x-text="p"></option>
+                                </template>
+                            </select>
+                        </label>
+                        <label class="field">
+                            <span class="field-label">Kota / Kabupaten</span>
+                            <select
+                                id="modal-kabkota"
+                                class="filled-select"
+                                :disabled="!cities.length || loadingCities"
+                                :aria-busy="loadingCities ? 'true' : 'false'"
+                                x-model="selectedCity"
+                            >
+                                <option value="">{{ loadingCities ? 'Memuat kota…' : 'Pilih Kota/Kabupaten' }}</option>
+                                <template x-for="c in cities" :key="c">
+                                    <option :value="c" x-text="c"></option>
+                                </template>
+                            </select>
+                            <span class="field-hint" x-show="loadingCities" x-transition.opacity>
+                                <span class="inline-spinner" aria-hidden="true"></span>
+                                Mengambil daftar kota…
+                            </span>
+                        </label>
+                        <button @click="detectLocation()" type="button" class="button-tonal">
+                            <span class="material-icons-round" aria-hidden="true">my_location</span>
+                            Deteksi Lokasi Saya
+                        </button>
+                        <button @click="saveLocation()" type="button" class="button-filled" :disabled="!selectedCity">
+                            Simpan &amp; Masuk
                         </button>
                     </div>
                 </div>
             </div>
 
             <header class="app-bar">
-                <div class="header-row">
-                    <div class="badge-container location-badge">
-                        <span class="material-icons-round">location_on</span>
-                        <span id="current-city" class="label-large" x-text="cityLabel || 'Pilih Lokasi'"></span>
-                    </div>
-                    <div class="badge-container countdown-badge">
-                        <span class="material-icons-round">schedule</span>
-                        <div class="countdown-text">
-                            <span id="next-prayer-name" class="label-small" x-text="nextPrayer.name || '---'"></span>
-                            <span id="countdown-timer" class="title-medium" x-text="nextPrayer.timer || '00:00:00'"></span>
-                        </div>
-                    </div>
-                    <button @click="modals.settings = true" class="icon-button">
-                        <span class="material-icons-round">settings</span>
-                    </button>
-                </div>
+                <button @click="changeLocation()" type="button" class="location-chip" aria-label="Ganti lokasi">
+                    <span class="material-icons-round" aria-hidden="true">location_on</span>
+                    <span class="location-chip-text">
+                        <span class="location-chip-label">Lokasi</span>
+                        <span id="current-city" x-text="cityLabel || 'Pilih lokasi'"></span>
+                    </span>
+                    <span class="material-icons-round chip-chevron" aria-hidden="true">expand_more</span>
+                </button>
+                <button @click="modals.settings = true" type="button" class="icon-button" aria-label="Buka pengaturan" aria-haspopup="dialog">
+                    <span class="material-icons-round" aria-hidden="true">settings</span>
+                </button>
             </header>
 
             <!-- Modal Pengaturan -->
-            <div id="settings-modal" class="modal" x-show="modals.settings" @click.self="modals.settings = false" x-transition>
-                <div class="modal-content surface-container">
+            <div id="settings-modal" class="modal" x-show="modals.settings" @click.self="modals.settings = false" x-transition role="dialog" aria-modal="true" aria-labelledby="settings-title" @keydown.escape.window="modals.settings = false">
+                <div class="surface-container">
                     <div class="modal-header">
-                        <h2 class="headline-small">Pengaturan</h2>
-                        <button @click="modals.settings = false" class="icon-button">
-                            <span class="material-icons-round">close</span>
+                        <h2 id="settings-title" class="headline-small">Pengaturan</h2>
+                        <button @click="modals.settings = false" type="button" class="icon-button icon-button-ghost" aria-label="Tutup pengaturan">
+                            <span class="material-icons-round" aria-hidden="true">close</span>
                         </button>
                     </div>
                     <div class="settings-list">
-                        <div class="setting-item" @click="toggleTheme()">
+                        <div
+                            class="setting-item"
+                            @click="toggleTheme()"
+                            @keydown.enter.prevent="toggleTheme()"
+                            @keydown.space.prevent="toggleTheme()"
+                            role="switch"
+                            tabindex="0"
+                            :aria-checked="theme === 'dark'"
+                        >
                             <div class="setting-info">
-                                <span class="material-icons-round" x-text="theme === 'dark' ? 'light_mode' : 'dark_mode'"></span>
-                                <span class="body-large">Tema Gelap/Terang</span>
+                                <span class="material-icons-round" aria-hidden="true" x-text="theme === 'dark' ? 'light_mode' : 'dark_mode'"></span>
+                                <div class="setting-copy">
+                                    <span class="body-large">Tema Gelap</span>
+                                    <span class="setting-desc" x-text="theme === 'dark' ? 'Aktif' : 'Nonaktif'"></span>
+                                </div>
                             </div>
+                            <span class="switch" :class="{ on: theme === 'dark' }" aria-hidden="true">
+                                <span class="switch-thumb"></span>
+                            </span>
                         </div>
-                        <div class="setting-item" @click="changeLocation()">
+                        <div
+                            class="setting-item"
+                            @click="changeLocation()"
+                            @keydown.enter.prevent="changeLocation()"
+                            @keydown.space.prevent="changeLocation()"
+                            role="button"
+                            tabindex="0"
+                        >
                             <div class="setting-info">
-                                <span class="material-icons-round">edit_location</span>
-                                <span class="body-large">Ganti Lokasi</span>
+                                <span class="material-icons-round" aria-hidden="true">edit_location</span>
+                                <div class="setting-copy">
+                                    <span class="body-large">Ganti Lokasi</span>
+                                    <span class="setting-desc" x-text="cityLabel || 'Belum dipilih'"></span>
+                                </div>
                             </div>
-                            <span class="material-icons-round">chevron_right</span>
+                            <span class="material-icons-round" aria-hidden="true">chevron_right</span>
                         </div>
                     </div>
                 </div>
             </div>
 
             <main class="content-area">
-                <div class="surface-card main-card">
+                <section class="surface-card summary-card" aria-label="Ringkasan hari ini">
                     <div class="date-header">
-                        <div id="timeNow">
-                            <span id="hari" class="display-small" x-text="today.hari || '---'"></span>
-                            <span id="date" class="body-medium" x-text="today.date || '---'"></span>
-                            <span id="hijri" class="title-small" x-text="today.hijri || '---'"></span>
+                        <p class="eyebrow">Hari ini</p>
+                        <h1 id="hari" class="display-small" x-text="today.hari || '———'"></h1>
+                        <div class="date-badges">
+                            <span id="date" class="pill" x-text="today.date || 'Tanggal belum tersedia'"></span>
+                            <span id="hijri" class="pill pill-tonal" x-text="today.hijri || 'Kalender Hijriah'"></span>
                         </div>
+                    </div>
+
+                    <div class="countdown-hero">
+                        <p class="hero-eyebrow">Menuju <strong x-text="nextPrayer.name || '—'"></strong></p>
+                        <p id="countdown-timer" class="hero-timer" x-text="nextPrayer.timer || '--:--:--'"></p>
+                        <div class="hero-meta">
+                            <span id="next-prayer-name" x-text="nextPrayer.clock ? 'Pukul ' + nextPrayer.clock : 'Waktu belum tersedia'"></span>
+                            <span class="dot" aria-hidden="true"></span>
+                            <span x-text="cityLabel || 'Lokasi belum dipilih'"></span>
+                        </div>
+                        <div
+                            class="progress-track"
+                            role="progressbar"
+                            aria-label="Progres menuju waktu shalat berikutnya"
+                            aria-valuemin="0"
+                            aria-valuemax="100"
+                            :aria-valuenow="Math.round(nextPrayer.progress || 0)"
+                        >
+                            <div class="progress-fill" :style="`width: ${Math.min(100, Math.max(0, nextPrayer.progress || 0))}%`"></div>
+                        </div>
+                    </div>
+                </section>
+
+                <section class="surface-card schedule-card" aria-label="Jadwal shalat hari ini">
+                    <div class="section-head">
+                        <h2 class="title-large">Jadwal Hari Ini</h2>
+                        <span class="section-note" x-show="activeLabel" x-transition.opacity x-text="'Waktu ' + activeLabel"></span>
                     </div>
 
                     <div class="schedule-list">
                         <template x-for="(time, name, index) in schedule" :key="name">
-                            <div class="list-item" 
-                                 :id="'row-' + name"
-                                 :class="{ 'active pulse-glow': activePrayer === name }"
-                                 x-show="showSchedule"
-                                 x-transition:enter="entry-list-item"
-                                 :style="'animation-delay: ' + (index * 0.06) + 's'">
-                                <div class="item-content">
-                                    <p class="label-medium" x-text="name.charAt(0).toUpperCase() + name.slice(1)"></p>
-                                    <span class="title-large" x-text="time"></span>
+                            <div
+                                class="list-item"
+                                :id="'row-' + name"
+                                :class="{ 'is-active': activePrayer === name, 'is-next': nextPrayer.key === name }"
+                                x-show="showSchedule"
+                                x-transition:enter="entry-list-item"
+                                :style="'animation-delay: ' + (index * 0.05) + 's'"
+                            >
+                                <span class="material-icons-round item-icon" aria-hidden="true" x-text="prayerIcons[name] || 'schedule'"></span>
+                                <div class="item-main">
+                                    <p class="item-name" x-text="labelFor(name)"></p>
+                                    <span class="item-state" x-show="activePrayer === name">Sedang berlangsung</span>
+                                    <span class="item-state state-next" x-show="nextPrayer.key === name">Berikutnya</span>
                                 </div>
+                                <span class="item-time" x-text="time"></span>
                             </div>
                         </template>
+                        <p class="schedule-empty" x-show="!Object.keys(schedule).length">Jadwal akan tampil setelah lokasi dipilih.</p>
                     </div>
-                </div>
+                </section>
             </main>
         </div>
         <script src="js/index.js"></script>

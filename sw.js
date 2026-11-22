@@ -1,12 +1,13 @@
-const CACHE_NAME = 'jadwal-shalat-v1';
+const CACHE_NAME = 'jadwal-shalat-v2';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
+  './manifest.json',
   './css/index.css',
+  './css/animation.css',
   './js/index.js',
   'https://fonts.googleapis.com/icon?family=Material+Icons+Round',
-  'https://fonts.googleapis.com/css2?family=Google+Sans:ital,opsz,wght@0,17..18,400..700;1,17..18,400..700&display=swap',
-  'https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js'
+  'https://fonts.googleapis.com/css2?family=Google+Sans:ital,opsz,wght@0,17..18,400..700;1,17..18,400..700&display=swap'
 ];
 
 // Install Event
