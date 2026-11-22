@@ -8,16 +8,28 @@
   "theme_color": "#00694a",
   "icons": [
     {
-      "src": "https://cdn-icons-png.flaticon.com/512/2699/2699314.png",
+      "src": "img/icon-192.png",
       "sizes": "192x192",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
     },
     {
-      "src": "https://cdn-icons-png.flaticon.com/512/2699/2699314.png",
+      "src": "img/icon-512.png",
       "sizes": "512x512",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
+    },
+    {
+      "src": "img/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "img/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
     }
   ]
 }

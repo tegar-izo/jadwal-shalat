@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="Ikon Jadwal Shalat">
+    <defs>
+        <linearGradient id="sky" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0" stop-color="#0aa86f" />
+            <stop offset="0.55" stop-color="#007a54" />
+            <stop offset="1" stop-color="#00422f" />
+        </linearGradient>
+        <radialGradient id="shine" cx="0.5" cy="0.18" r="0.78">
+            <stop offset="0" stop-color="#ffffff" stop-opacity="0.28" />
+            <stop offset="1" stop-color="#ffffff" stop-opacity="0" />
+        </radialGradient>
+    </defs>
+
+    <rect width="512" height="512" fill="url(#sky)" />
+    <rect width="512" height="512" fill="url(#shine)" />
+
+    <g transform="translate(256 256) scale(0.78) translate(-256 -256)">
+        <g fill="#f3faf6">
+            <!-- Kubah utama -->
+            <path d="M190 280 C190 238 216 224 256 156 C296 224 322 238 322 280 Z" />
+            <rect x="252" y="116" width="8" height="44" rx="4" />
+            <circle cx="256" cy="110" r="11" />
+
+            <!-- Badan bangunan -->
+            <rect x="176" y="270" width="160" height="128" />
+
+            <!-- Menara kiri -->
+            <rect x="122" y="246" width="26" height="152" />
+            <path d="M122 248 a13 13 0 0 1 26 0 Z" />
+            <rect x="132" y="212" width="6" height="26" rx="3" />
+            <circle cx="135" cy="208" r="8" />
+
+            <!-- Menara kanan -->
+            <rect x="364" y="246" width="26" height="152" />
+            <path d="M364 248 a13 13 0 0 1 26 0 Z" />
+            <rect x="374" y="212" width="6" height="26" rx="3" />
+            <circle cx="377" cy="208" r="8" />
+
+            <!-- Alas -->
+            <rect x="104" y="398" width="304" height="20" rx="10" />
+        </g>
+
+        <g fill="#00422f">
+            <!-- Pintu -->
+            <path d="M236 398 V348 C236 328 246 320 256 300 C266 320 276 328 276 348 V398 Z" />
+            <!-- Jendela -->
+            <path d="M196 398 V368 C196 356 202 350 210 342 C218 350 224 356 224 368 V398 Z" />
+            <path d="M288 398 V368 C288 356 294 350 302 342 C310 350 316 356 316 368 V398 Z" />
+        </g>
+    </g>
+</svg>
